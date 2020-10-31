@@ -79,13 +79,15 @@ void A_input(struct pkt packet) {
     }
 
     // move window
-    a_window->ack_packet(packet.acknum, simulation->getSimulatorClock());
+    if( a_window->ack_packet(packet.acknum, simulation->getSimulatorClock())) {
+        // update timer
+        if(a_window->get_vacency() == a_window->WINDOW_SIZE)
+            a_timer->stop();
+        else
+            a_timer->restart(a_window->get_rto());
+    };
 
-    // update timer
-    if(a_window->get_vacency() == a_window->WINDOW_SIZE)
-        a_timer->stop();
-    else
-        a_timer->restart(a_window->get_rto());
+
 }
 
 
@@ -134,6 +136,7 @@ void B_input(struct pkt packet) {
 // ***************************************************************************
 void A_timerinterrupt() {
     std::cout << "Side A's timer has gone off." << std::endl;
+    a_timer->set_expired();
 
     // Retransmit cached packets
     if(a_window->get_vacency() != a_window->WINDOW_SIZE) {
@@ -266,6 +269,10 @@ void Timer::restart(time_t tm) {
 
 void Timer::stop() {
     simulation->stoptimer(this->SIDE);
+    this->running_ = false;
+}
+
+void Timer::set_expired() {
     this->running_ = false;
 }
 

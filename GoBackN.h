@@ -10,7 +10,7 @@
 // ***********************************************************
 
 #define MAX_WINDOW_SIZE 10
-#define INIT_RTT 50
+#define INIT_RTT 10
 
 #define ALPHA  0.125
 #define BETA 1.5
@@ -68,7 +68,8 @@ public:
     void start(time_t tm);
     void stop();
     bool running();
-
+    void set_expired();
+    
 
     private:
         const int SIDE;
