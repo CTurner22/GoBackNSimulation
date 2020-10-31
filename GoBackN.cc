@@ -86,14 +86,6 @@ void A_input(struct pkt packet) {
             a_timer->stop();
         else
             a_timer->restart(a_window->get_rto());
-    } else {
-            // Retransmit cached packets
-        if(a_window->get_vacency() != a_window->WINDOW_SIZE) {
-            for(int i = a_window->get_base(); i < a_window->get_seq(); i++) {
-                simulation->tolayer3(A, *a_window->get_packet(i, simulation->getSimulatorClock()));
-            }
-        }
-        a_timer->restart(a_window->get_rto());
     };
 
 
@@ -154,7 +146,6 @@ void A_timerinterrupt() {
 
         }
     }
-
     a_timer->start(a_window->get_rto());
 
 }
@@ -234,7 +225,7 @@ bool Window::ack_packet(int seq, time_t tm) {
         valid_ack = true;
 
         // update rtt
-        this->est_rtt_ = (this->est_rtt_ * ALPHA) + ((1 - ALPHA) * (tm - this->time_at_(seq)));
+        this->est_rtt_ = (this->est_rtt_ * (1 - ALPHA)) + (ALPHA * (tm - this->time_at_(seq)));
     }
 
     if (this->current_seq_ < this->base_seq_) {
@@ -260,7 +251,7 @@ Window::pckt_ptr Window::get_packet(int seq, time_t tm) {
 }
 
 Window::time_t Window::get_rto() {
-    return this->est_rtt_ * BETA;
+    return std::max( std::min(this->est_rtt_ * BETA, MAX_RTT), MIN_RTT);
 }
 
 Timer::Timer(int side) : SIDE{side} {}

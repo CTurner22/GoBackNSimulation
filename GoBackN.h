@@ -10,7 +10,9 @@
 // ***********************************************************
 
 #define MAX_WINDOW_SIZE 10
-#define INIT_RTT 50
+#define INIT_RTT 50.0
+#define MIN_RTT 15.0
+#define MAX_RTT 100.0
 
 #define ALPHA  0.125
 #define BETA 1.5
