@@ -44,8 +44,8 @@ public:
 
 private:
 
-    int base_seq_ = 0;
-    int current_seq_ = 0;
+    int base_seq_ = 1;
+    int current_seq_ = 1;
     time_t est_rtt_ = INIT_RTT;
 
 

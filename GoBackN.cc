@@ -108,7 +108,7 @@ void B_input(struct pkt packet) {
               << std::endl;
 
     // check integrity
-    if (!vrfy_checksum(&packet) || packet.acknum != b_rx_seq + 1) {
+    if (!vrfy_checksum(&packet) || packet.seqnum != b_rx_seq + 1) {
 
         // curruption or out of order, resend ack for last valid seq
         std::shared_ptr<struct pkt> pckt = make_pkt(0, b_rx_seq, nullptr);
@@ -159,8 +159,11 @@ std::unique_ptr<struct pkt> make_pkt(int seq, int ack, struct msg *message) {
     ret->acknum = ack;
     ret->checksum = 0;
 
-    if(message)
+    if(message) {
         memcpy(ret->payload, message->data, sizeof(message->data));
+    } else {
+        memset(ret->payload, '\0', sizeof(ret->payload));
+    }
 
     // generate checksum
     char *start = reinterpret_cast<char*>(ret.get());
@@ -178,7 +181,8 @@ bool vrfy_checksum(struct pkt* pckt) {
     pckt->checksum = 0;
 
     char *start = reinterpret_cast<char*>(pckt);
-    return std::hash<std::string>{}( std::string(start, start + sizeof(struct pkt))) >> 32 == orig;
+    int hash = std::hash<std::string>{}( std::string(start, start + sizeof(struct pkt))) >> 32;
+    return  hash == orig;
 }
 
 Window::Window(size_t N) : pckt_cache_{ std::make_unique<pckt_ptr[]>(N) }, 
@@ -211,7 +215,7 @@ Window::time_t& Window::time_at_(int seq) {
 bool Window::ack_packet(int seq, time_t tm) {
     bool valid_ack = false;
 
-    if (this->base_seq_ < seq) {
+    if (this->base_seq_ <= seq) {
         this->base_seq_ = seq + 1;
         valid_ack = true;
 
