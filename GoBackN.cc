@@ -80,11 +80,20 @@ void A_input(struct pkt packet) {
 
     // move window
     if( a_window->ack_packet(packet.acknum, simulation->getSimulatorClock())) {
+
         // update timer
         if(a_window->get_vacency() == a_window->WINDOW_SIZE)
             a_timer->stop();
         else
             a_timer->restart(a_window->get_rto());
+    } else {
+            // Retransmit cached packets
+        if(a_window->get_vacency() != a_window->WINDOW_SIZE) {
+            for(int i = a_window->get_base(); i < a_window->get_seq(); i++) {
+                simulation->tolayer3(A, *a_window->get_packet(i, simulation->getSimulatorClock()));
+            }
+        }
+        a_timer->restart(a_window->get_rto());
     };
 
 
@@ -145,6 +154,8 @@ void A_timerinterrupt() {
 
         }
     }
+
+    a_timer->start(a_window->get_rto());
 
 }
 
@@ -207,11 +218,11 @@ int Window::get_vacency() {
 
 
 Window::pckt_ptr& Window::pckt_at_(int seq) {
-    return pckt_cache_[(seq - this->base_seq_) % WINDOW_SIZE];
+    return pckt_cache_[seq % WINDOW_SIZE];
 }
 
 Window::time_t& Window::time_at_(int seq) {
-    return times_[(seq - this->base_seq_) % WINDOW_SIZE];
+    return times_[seq % WINDOW_SIZE];
 }
 
 
