@@ -33,8 +33,8 @@ void A_init() {
 // * entity B routines are called. You can use it to do any initialization
 // ***************************************************************************
 void B_init() {
-
-
+    b_window = std::make_unique<Window>(MAX_WINDOW_SIZE);
+    b_timer = std::make_unique<Timer>(B);
 }
 
 
@@ -73,20 +73,46 @@ int A_output(struct msg message) {
 void A_input(struct pkt packet) {
     std::cout << "Layer 4 on side A has recieved a packet sent over the network from side B:" << packet << std::endl;
 
-    // check integrity
-    if (!vrfy_checksum(&packet)) {
-        return;
+    // handle acks
+    if (packet.seqnum == 0) {
+        // check integrity
+        if (!vrfy_checksum(&packet)) {
+            return;
+        }
+
+        // move window
+        if( a_window->ack_packet(packet.acknum, simulation->getSimulatorClock())) {
+
+            // update timer
+            if(a_window->get_vacency() == a_window->WINDOW_SIZE)
+                a_timer->stop();
+            else
+                a_timer->restart(a_window->get_rto());
+        };
     }
 
-    // move window
-    if( a_window->ack_packet(packet.acknum, simulation->getSimulatorClock())) {
+    // handle rx packets
+    if (packet.acknum == 0) {
+        // check integrity
+        if (!vrfy_checksum(&packet) || packet.seqnum != a_rx_seq + 1) {
 
-        // update timer
-        if(a_window->get_vacency() == a_window->WINDOW_SIZE)
-            a_timer->stop();
-        else
-            a_timer->restart(a_window->get_rto());
-    };
+            // curruption or out of order, resend ack for last valid seq
+            std::shared_ptr<struct pkt> pckt = make_pkt(0, a_rx_seq, nullptr);
+            simulation->tolayer3(A, *pckt);
+            return;
+        }
+
+
+        // send valid ack
+        std::shared_ptr<struct pkt> pckt = make_pkt(0, ++a_rx_seq, nullptr);
+        simulation->tolayer3(A, *pckt);
+
+        // send up stack
+        auto message = std::make_unique<struct msg>();
+        memcpy(message->data, packet.payload, sizeof(packet.payload));
+
+        simulation->tolayer5(A, *message);
+    }
 
 
 }
@@ -99,7 +125,25 @@ int B_output(struct msg message) {
     std::cout << "Layer 4 on side B has recieved a message from the application that should be sent to side A: "
               << message << std::endl;
 
-    return (1); /* Return a 0 to refuse the message */
+    // check if we have room
+    if(!b_window->get_vacency())
+        return TX_REFUSED;
+
+    // construct packet with message data and send to side B
+    std::shared_ptr<struct pkt> pckt = make_pkt(b_window->get_seq(), 0, &message);
+    
+    // add it to cache
+    float time = simulation->getSimulatorClock();
+    b_window->add_packet(pckt, time);
+
+    // send it
+    simulation->tolayer3(B, *pckt);
+
+    // start timer
+    if(!b_timer->running())
+        b_timer->start(b_window->get_rto());
+    
+    return TX_SUCCESS;
 }
 
 
@@ -110,25 +154,47 @@ void B_input(struct pkt packet) {
     std::cout << "Layer 4 on side B has recieved a packet from layer 3 sent over the network from side A:" << packet
               << std::endl;
 
-    // check integrity
-    if (!vrfy_checksum(&packet) || packet.seqnum != b_rx_seq + 1) {
+    // handle acks
+    if (packet.seqnum == 0) {
+        // check integrity
+        if (!vrfy_checksum(&packet)) {
+            return;
+        }
 
-        // curruption or out of order, resend ack for last valid seq
-        std::shared_ptr<struct pkt> pckt = make_pkt(0, b_rx_seq, nullptr);
-        simulation->tolayer3(B, *pckt);
-        return;
+        // move window
+        if( b_window->ack_packet(packet.acknum, simulation->getSimulatorClock())) {
+
+            // update timer
+            if(b_window->get_vacency() == b_window->WINDOW_SIZE)
+                b_timer->stop();
+            else
+                b_timer->restart(b_window->get_rto());
+        };
     }
 
+    // handle rx packets
+    if (packet.acknum == 0) {
+        // check integrity
+        if (!vrfy_checksum(&packet) || packet.seqnum != b_rx_seq + 1) {
 
-    // send valid ack
-    std::shared_ptr<struct pkt> pckt = make_pkt(0, ++b_rx_seq, nullptr);
-    simulation->tolayer3(B, *pckt);
+            // curruption or out of order, resend ack for last valid seq
+            std::shared_ptr<struct pkt> pckt = make_pkt(0, b_rx_seq, nullptr);
+            simulation->tolayer3(B, *pckt);
+            return;
+        }
 
-    // send up stack
-    auto message = std::make_unique<struct msg>();
-    memcpy(message->data, packet.payload, sizeof(packet.payload));
 
-    simulation->tolayer5(B, *message);
+        // send valid ack
+        std::shared_ptr<struct pkt> pckt = make_pkt(0, ++b_rx_seq, nullptr);
+        simulation->tolayer3(B, *pckt);
+
+        // send up stack
+        auto message = std::make_unique<struct msg>();
+        memcpy(message->data, packet.payload, sizeof(packet.payload));
+
+        simulation->tolayer5(B, *message);
+    }
+
 }
 
 
